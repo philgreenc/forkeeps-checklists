@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>For Keeps Checklists</title>
+<meta name="theme-color" content="#8E4D38">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root { --red:#8E4D38; --cream:#F8F1E2; --tan:#C7A487; --ink:#2B211C; }
+  html, body { margin:0; height:100%; background:var(--cream); font-family:-apple-system, Roboto, Arial, sans-serif; color:var(--ink); }
+  iframe { position:fixed; inset:0; width:100%; height:100%; border:0; background:var(--cream); }
+  .bar { position:fixed; left:12px; bottom:12px; display:flex; gap:8px; z-index:2; }
+  .bar button { font-size:13px; padding:8px 12px; border:0; border-radius:20px; background:rgba(43,33,28,.72); color:#fff; }
+  .pick { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; padding:24px; text-align:center; }
+  .pick h1 { margin:0 0 8px; color:var(--red); font-size:28px; }
+  .pick p { margin:0 0 12px; color:#6b5a50; font-size:17px; }
+  .pick button { width:min(360px, 90%); font-size:22px; padding:20px; border:0; border-radius:16px; background:var(--red); color:#fff; font-weight:700; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<div class="pick" id="pick" hidden>
+  <h1>For Keeps Checklists</h1>
+  <p>Which shop is this tablet in?</p>
+  <button data-shop="Bosque">Bosque</button>
+  <button data-shop="4th St">4th St</button>
+</div>
+<iframe id="page" title="For Keeps Checklists" hidden></iframe>
+<div class="bar" id="bar" hidden>
+  <button id="all" hidden>All checklists</button>
+  <button id="switch">Change shop</button>
+</div>
+<script>
+  // The checklist page itself is the Google Apps Script web app. This wrapper only shows it full screen.
+  var EXEC = 'https://script.google.com/macros/s/AKfycbxk37zfKCQpWyzsxLspFDfHM5CmSRLbil3H6mdAdipmqFIm3Q41fPxT0ap8R5A0n1eA/exec';
+  var params = new URLSearchParams(location.search);
+  var run = params.get('run');
+  var store = {
+    get: function () { try { return localStorage.getItem('shop'); } catch (e) { return null; } },
+    set: function (v) { try { v ? localStorage.setItem('shop', v) : localStorage.removeItem('shop'); } catch (e) {} }
+  };
+  if (params.get('shop')) store.set(params.get('shop'));
+
+  var frame = document.getElementById('page'), pick = document.getElementById('pick'), bar = document.getElementById('bar');
+
+  function show() {
+    var shop = store.get();
+    if (!run && !shop) { pick.hidden = false; frame.hidden = true; bar.hidden = true; return; }
+    pick.hidden = true; frame.hidden = false; bar.hidden = false;
+    document.getElementById('all').hidden = !run;
+    frame.src = EXEC + (run ? '?run=' + encodeURIComponent(run) : '?shop=' + encodeURIComponent(shop));
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('[data-shop]'), function (b) {
+    b.onclick = function () { store.set(b.getAttribute('data-shop')); show(); };
+  });
+  document.getElementById('switch').onclick = function () { store.set(null); run = null; history.replaceState(null, '', './'); show(); };
+  document.getElementById('all').onclick = function () { run = null; history.replaceState(null, '', './'); show(); };
+
+  // Coming back to the app reloads the shop view so new checklists show up.
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && !run && store.get()) frame.src = frame.src;
+  });
+
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
+  show();
+</script>
+</body>
+</html>
