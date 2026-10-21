@@ -63,13 +63,18 @@
     fetch(EXEC + '?api=tablets').then(function (r) { return r.json(); }).then(function (all) {
       ask.textContent = 'Which tablet is this?';
       (all[shop] || []).forEach(function (d) { button(d, '', function () { store.set('tablet', d); show(); }); });
-      button('Show every ' + shop + ' checklist', 'alt', function () { store.set('tablet', ''); show(); });
-    }).catch(function () { store.set('tablet', ''); show(); });
+      button('Back', 'alt', function () { store.set('shop', null); setupShop(); });
+    }).catch(function () {
+      // Never fall back to showing every checklist: this tablet would see other stations' lists.
+      ask.textContent = 'Could not load the tablet list. Check the Wi-Fi and try again.';
+      choices.innerHTML = '';
+      button('Try again', '', function () { setupTablet(shop); });
+    });
   }
 
   function show() {
     var shop = store.get('shop'), tablet = store.get('tablet');
-    if (!run && (!shop || tablet === null)) {
+    if (!run && (!shop || !tablet)) {  // a blank tablet (old "show every" setting) must pick again
       pick.hidden = false; frame.hidden = true; bar.hidden = true;
       shop ? setupTablet(shop) : setupShop();
       return;
