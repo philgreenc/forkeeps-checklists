@@ -18,20 +18,21 @@
   .pick h1 { margin:0 0 8px; color:var(--red); font-size:28px; }
   .pick p { margin:0 0 12px; color:#6b5a50; font-size:17px; }
   .pick button { width:min(360px, 90%); font-size:22px; padding:20px; border:0; border-radius:16px; background:var(--red); color:#fff; font-weight:700; }
+  .pick button.alt { background:#fff; color:var(--red); border:2px solid var(--tan); font-size:18px; padding:14px; }
+  .pick .list { display:flex; flex-direction:column; align-items:center; gap:12px; width:100%; }
   [hidden] { display:none !important; }
 </style>
 </head>
 <body>
 <div class="pick" id="pick" hidden>
   <h1>For Keeps Checklists</h1>
-  <p>Which shop is this tablet in?</p>
-  <button data-shop="Bosque">Bosque</button>
-  <button data-shop="4th St">4th St</button>
+  <p id="ask">Which shop is this tablet in?</p>
+  <div class="list" id="choices"></div>
 </div>
 <iframe id="page" title="For Keeps Checklists" hidden></iframe>
 <div class="bar" id="bar" hidden>
   <button id="all" hidden>All checklists</button>
-  <button id="switch">Change shop</button>
+  <button id="switch">Change tablet</button>
 </div>
 <script>
   // The checklist page itself is the Google Apps Script web app. This wrapper only shows it full screen.
@@ -39,30 +40,52 @@
   var params = new URLSearchParams(location.search);
   var run = params.get('run');
   var store = {
-    get: function () { try { return localStorage.getItem('shop'); } catch (e) { return null; } },
-    set: function (v) { try { v ? localStorage.setItem('shop', v) : localStorage.removeItem('shop'); } catch (e) {} }
+    get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: function (k, v) { try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} }
   };
-  if (params.get('shop')) store.set(params.get('shop'));
+  if (params.get('shop')) store.set('shop', params.get('shop'));
 
   var frame = document.getElementById('page'), pick = document.getElementById('pick'), bar = document.getElementById('bar');
+  var ask = document.getElementById('ask'), choices = document.getElementById('choices');
 
-  function show() {
-    var shop = store.get();
-    if (!run && !shop) { pick.hidden = false; frame.hidden = true; bar.hidden = true; return; }
-    pick.hidden = true; frame.hidden = false; bar.hidden = false;
-    document.getElementById('all').hidden = !run;
-    frame.src = EXEC + (run ? '?run=' + encodeURIComponent(run) : '?shop=' + encodeURIComponent(shop));
+  function button(label, cls, fn) {
+    var b = document.createElement('button'); b.textContent = label; if (cls) b.className = cls; b.onclick = fn;
+    choices.appendChild(b);
   }
 
-  Array.prototype.forEach.call(document.querySelectorAll('[data-shop]'), function (b) {
-    b.onclick = function () { store.set(b.getAttribute('data-shop')); show(); };
-  });
-  document.getElementById('switch').onclick = function () { store.set(null); run = null; history.replaceState(null, '', './'); show(); };
+  // Setup: shop first, then which tablet this is (its Pushover device name), so it only shows its own checklists.
+  function setupShop() {
+    ask.textContent = 'Which shop is this tablet in?'; choices.innerHTML = '';
+    ['Bosque', '4th St'].forEach(function (s) { button(s, '', function () { store.set('shop', s); setupTablet(s); }); });
+  }
+  function setupTablet(shop) {
+    ask.textContent = 'Loading tablets...'; choices.innerHTML = '';
+    fetch(EXEC + '?api=tablets').then(function (r) { return r.json(); }).then(function (all) {
+      ask.textContent = 'Which tablet is this?';
+      (all[shop] || []).forEach(function (d) { button(d, '', function () { store.set('tablet', d); show(); }); });
+      button('Show every ' + shop + ' checklist', 'alt', function () { store.set('tablet', ''); show(); });
+    }).catch(function () { store.set('tablet', ''); show(); });
+  }
+
+  function show() {
+    var shop = store.get('shop'), tablet = store.get('tablet');
+    if (!run && (!shop || tablet === null)) {
+      pick.hidden = false; frame.hidden = true; bar.hidden = true;
+      shop ? setupTablet(shop) : setupShop();
+      return;
+    }
+    pick.hidden = true; frame.hidden = false; bar.hidden = false;
+    document.getElementById('all').hidden = !run;
+    frame.src = EXEC + (run ? '?run=' + encodeURIComponent(run)
+      : '?shop=' + encodeURIComponent(shop) + (tablet ? '&tablet=' + encodeURIComponent(tablet) : ''));
+  }
+
+  document.getElementById('switch').onclick = function () { store.set('shop', null); store.set('tablet', null); run = null; history.replaceState(null, '', './'); show(); };
   document.getElementById('all').onclick = function () { run = null; history.replaceState(null, '', './'); show(); };
 
   // Coming back to the app reloads the shop view so new checklists show up.
   document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'visible' && !run && store.get()) frame.src = frame.src;
+    if (document.visibilityState === 'visible' && !run && store.get('shop')) frame.src = frame.src;
   });
 
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
